@@ -33,15 +33,12 @@ class CraftingRecipe:
 
 class CraftingSystem:
     def __init__(self):
-        self.materials: Dict[str, Material] = {}
-        self.recipes: Dict[str, CraftingRecipe] = {}
-        self._initialize_materials()
-        self._initialize_recipes()
+        self.materials = self._initialize_materials()
+        self.recipes = self._initialize_recipes()
     
-    def _initialize_materials(self):
-        """Initialize all craftable materials"""
-        self.materials = {
-            # Common Materials
+    def _initialize_materials(self) -> Dict[str, Material]:
+        """Initialize all available materials"""
+        return {
             "iron_ore": Material(
                 id="iron_ore",
                 name="Iron Ore",
@@ -69,8 +66,6 @@ class CraftingSystem:
                 locations=["Enchanted Forest", "Training Grounds"],
                 drop_chance=0.25
             ),
-            
-            # Uncommon Materials
             "silver_ore": Material(
                 id="silver_ore",
                 name="Silver Ore",
@@ -98,8 +93,6 @@ class CraftingSystem:
                 locations=["Arcane Library"],
                 drop_chance=0.1
             ),
-            
-            # Rare Materials
             "gold_ore": Material(
                 id="gold_ore",
                 name="Gold Ore",
@@ -127,8 +120,6 @@ class CraftingSystem:
                 locations=["Arcane Library"],
                 drop_chance=0.02
             ),
-            
-            # Epic Materials
             "mithril_ore": Material(
                 id="mithril_ore",
                 name="Mithril Ore",
@@ -156,8 +147,6 @@ class CraftingSystem:
                 locations=["Thieves' Den"],
                 drop_chance=0.005
             ),
-            
-            # Legendary Materials
             "dragon_heart": Material(
                 id="dragon_heart",
                 name="Dragon Heart",
@@ -187,17 +176,16 @@ class CraftingSystem:
             )
         }
     
-    def _initialize_recipes(self):
-        """Initialize all crafting recipes"""
-        self.recipes = {
-            # Common Recipes
+    def _initialize_recipes(self) -> Dict[str, CraftingRecipe]:
+        """Initialize all available recipes"""
+        return {
             "iron_sword": CraftingRecipe(
                 id="iron_sword",
                 name="Iron Sword",
                 description="A basic sword made of iron",
                 rarity=Rarity.COMMON,
                 required_level=1,
-                materials={"iron_ore": 3, "wood": 1},
+                materials={"iron_ore": 2, "wood": 1},
                 result="iron_sword"
             ),
             "leather_armor": CraftingRecipe(
@@ -209,15 +197,13 @@ class CraftingSystem:
                 materials={"leather": 4, "wood": 1},
                 result="leather_armor"
             ),
-            
-            # Uncommon Recipes
             "silver_dagger": CraftingRecipe(
                 id="silver_dagger",
                 name="Silver Dagger",
                 description="A dagger made of silver",
                 rarity=Rarity.UNCOMMON,
                 required_level=3,
-                materials={"silver_ore": 2, "wood": 1},
+                materials={"silver_ore": 1, "wood": 1},
                 result="silver_dagger"
             ),
             "enchanted_staff": CraftingRecipe(
@@ -229,8 +215,6 @@ class CraftingSystem:
                 materials={"enchanted_wood": 1, "magic_crystal": 1},
                 result="enchanted_staff"
             ),
-            
-            # Rare Recipes
             "golden_sword": CraftingRecipe(
                 id="golden_sword",
                 name="Golden Sword",
@@ -249,8 +233,6 @@ class CraftingSystem:
                 materials={"dragon_scale": 5, "leather": 3},
                 result="dragon_scale_armor"
             ),
-            
-            # Epic Recipes
             "mithril_sword": CraftingRecipe(
                 id="mithril_sword",
                 name="Mithril Sword",
@@ -269,8 +251,6 @@ class CraftingSystem:
                 materials={"void_shard": 3, "enchanted_wood": 2},
                 result="void_robe"
             ),
-            
-            # Legendary Recipes
             "dragon_heart_sword": CraftingRecipe(
                 id="dragon_heart_sword",
                 name="Dragon Heart Sword",
@@ -296,8 +276,12 @@ class CraftingSystem:
         return self.materials.get(material_id)
     
     def get_recipe_by_id(self, recipe_id: str) -> Optional[CraftingRecipe]:
-        """Get recipe by ID"""
-        return self.recipes.get(recipe_id)
+        """Get a recipe by its ID"""
+        try:
+            return self.recipes.get(recipe_id)
+        except Exception as e:
+            print(f"Error getting recipe: {str(e)}")
+            return None
     
     def get_recipes_by_rarity(self, rarity: Rarity) -> List[CraftingRecipe]:
         """Get all recipes of a specific rarity"""
@@ -305,31 +289,41 @@ class CraftingSystem:
     
     def get_available_recipes(self, player_level: int, materials: Dict[str, int]) -> List[CraftingRecipe]:
         """Get all recipes that can be crafted with current materials and level"""
-        available = []
-        for recipe in self.recipes.values():
-            if player_level >= recipe.required_level:
-                can_craft = True
-                for material_id, quantity in recipe.materials.items():
-                    if materials.get(material_id, 0) < quantity:
-                        can_craft = False
-                        break
-                if can_craft:
-                    available.append(recipe)
-        return available
+        try:
+            available = []
+            for recipe in self.recipes.values():
+                if player_level >= recipe.required_level:
+                    can_craft = True
+                    for material_id, quantity in recipe.materials.items():
+                        if materials.get(material_id, 0) < quantity:
+                            can_craft = False
+                            break
+                    if can_craft:
+                        available.append(recipe)
+            return available
+        except Exception as e:
+            print(f"Error getting available recipes: {str(e)}")
+            return []
     
     def craft_item(self, recipe_id: str, materials: Dict[str, int]) -> Optional[str]:
         """Attempt to craft an item"""
-        recipe = self.get_recipe_by_id(recipe_id)
-        if not recipe:
-            return None
-        
-        # Check if we have enough materials
-        for material_id, quantity in recipe.materials.items():
-            if materials.get(material_id, 0) < quantity:
+        try:
+            recipe = self.get_recipe_by_id(recipe_id)
+            if not recipe:
+                print("❌ Invalid recipe ID!")
                 return None
-        
-        # Remove materials
-        for material_id, quantity in recipe.materials.items():
-            materials[material_id] -= quantity
-        
-        return recipe.result 
+            
+            # Check if we have enough materials
+            for material_id, quantity in recipe.materials.items():
+                if materials.get(material_id, 0) < quantity:
+                    print(f"❌ Not enough {material_id}!")
+                    return None
+            
+            # Remove materials
+            for material_id, quantity in recipe.materials.items():
+                materials[material_id] -= quantity
+            
+            return recipe.result
+        except Exception as e:
+            print(f"Error crafting item: {str(e)}")
+            return None 

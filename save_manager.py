@@ -13,26 +13,34 @@ class SaveManager:
         
         # Create saves directory if it doesn't exist
         if not os.path.exists(self.saves_dir):
-            os.makedirs(self.saves_dir)
+            try:
+                os.makedirs(self.saves_dir)
+            except Exception as e:
+                print(f"Error creating saves directory: {str(e)}")
+                raise
     
     def _generate_key(self, password: str) -> None:
         """Generate encryption key from password"""
-        # Convert password to bytes
-        password = password.encode()
-        
-        # Generate salt
-        salt = b'EldoriaSaveSystem'  # Fixed salt for consistency
-        
-        # Generate key using PBKDF2
-        kdf = PBKDF2HMAC(
-            algorithm=hashes.SHA256(),
-            length=32,
-            salt=salt,
-            iterations=100000,
-        )
-        key = base64.urlsafe_b64encode(kdf.derive(password))
-        self.key = key
-        self.fernet = Fernet(key)
+        try:
+            # Convert password to bytes
+            password = password.encode()
+            
+            # Generate salt
+            salt = b'EldoriaSaveSystem'  # Fixed salt for consistency
+            
+            # Generate key using PBKDF2
+            kdf = PBKDF2HMAC(
+                algorithm=hashes.SHA256(),
+                length=32,
+                salt=salt,
+                iterations=100000,
+            )
+            key = base64.urlsafe_b64encode(kdf.derive(password))
+            self.key = key
+            self.fernet = Fernet(key)
+        except Exception as e:
+            print(f"Error generating encryption key: {str(e)}")
+            raise
     
     def save_game(self, game_state: dict, save_name: str, password: str) -> bool:
         """
@@ -46,6 +54,7 @@ class SaveManager:
         Returns:
             bool: True if save was successful, False otherwise
         """
+        file = None
         try:
             # Generate encryption key
             self._generate_key(password)
@@ -58,13 +67,19 @@ class SaveManager:
             
             # Save to file
             save_path = os.path.join(self.saves_dir, f"{save_name}.sav")
-            with open(save_path, 'wb') as f:
-                f.write(encrypted_data)
+            file = open(save_path, 'wb')
+            file.write(encrypted_data)
             
             return True
+        except json.JSONDecodeError:
+            print("Error: Invalid game state format")
+            return False
         except Exception as e:
             print(f"Error saving game: {str(e)}")
             return False
+        finally:
+            if file:
+                file.close()
     
     def load_game(self, save_name: str, password: str) -> dict:
         """
@@ -77,14 +92,19 @@ class SaveManager:
         Returns:
             dict: Game state if successful, None if failed
         """
+        file = None
         try:
             # Generate encryption key
             self._generate_key(password)
             
             # Read encrypted file
             save_path = os.path.join(self.saves_dir, f"{save_name}.sav")
-            with open(save_path, 'rb') as f:
-                encrypted_data = f.read()
+            if not os.path.exists(save_path):
+                print(f"Error: Save file '{save_name}' not found")
+                return None
+                
+            file = open(save_path, 'rb')
+            encrypted_data = file.read()
             
             # Decrypt the data
             decrypted_data = self.fernet.decrypt(encrypted_data)
@@ -93,17 +113,27 @@ class SaveManager:
             game_state = json.loads(decrypted_data.decode())
             
             return game_state
+        except json.JSONDecodeError:
+            print("Error: Invalid save file format")
+            return None
         except Exception as e:
             print(f"Error loading game: {str(e)}")
             return None
+        finally:
+            if file:
+                file.close()
     
     def list_saves(self) -> list:
         """List all available save files"""
-        saves = []
-        for file in os.listdir(self.saves_dir):
-            if file.endswith('.sav'):
-                saves.append(file[:-4])  # Remove .sav extension
-        return saves
+        try:
+            saves = []
+            for file in os.listdir(self.saves_dir):
+                if file.endswith('.sav'):
+                    saves.append(file[:-4])  # Remove .sav extension
+            return saves
+        except Exception as e:
+            print(f"Error listing saves: {str(e)}")
+            return []
     
     def delete_save(self, save_name: str) -> bool:
         """
@@ -120,6 +150,7 @@ class SaveManager:
             if os.path.exists(save_path):
                 os.remove(save_path)
                 return True
+            print(f"Error: Save file '{save_name}' not found")
             return False
         except Exception as e:
             print(f"Error deleting save: {str(e)}")

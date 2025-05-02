@@ -184,6 +184,36 @@ SHOP_ITEMS = {
     "Lucky Charm": {"cost": 45, "description": "+3 luck", "type": "accessory"}
 }
 
+# Organize shop items by type
+items_by_type = {
+    "weapon": [],
+    "armor": [],
+    "accessory": [],
+    "consumable": [],
+    "material": []
+}
+
+# Populate items_by_type
+for item, details in SHOP_ITEMS.items():
+    items_by_type[details["type"]].append((item, details))
+
+# Add crafting materials to the shop
+crafting_materials = {
+    "Iron Ore": {"cost": 10, "description": "Basic metal ore", "type": "material", "id": "iron_ore"},
+    "Wood": {"cost": 5, "description": "Basic crafting material", "type": "material", "id": "wood"},
+    "Leather": {"cost": 8, "description": "Tanned animal hide", "type": "material", "id": "leather"},
+    "Silver Ore": {"cost": 25, "description": "Valuable metal ore", "type": "material", "id": "silver_ore"},
+    "Enchanted Wood": {"cost": 20, "description": "Magical wood", "type": "material", "id": "enchanted_wood"},
+    "Magic Crystal": {"cost": 30, "description": "Magical energy crystal", "type": "material", "id": "magic_crystal"}
+}
+
+# Add crafting materials to items_by_type
+for material, details in crafting_materials.items():
+    items_by_type["material"].append((material, details))
+
+# Combine SHOP_ITEMS and crafting_materials
+SHOP_ITEMS.update(crafting_materials)
+
 # Available quests
 AVAILABLE_QUESTS = {
     "Forest Guardian": {
@@ -520,107 +550,83 @@ def apply_passive_skill(skill_name):
         pass
 
 def shop():
+    """Display and handle the shop interface"""
     print_header("💰 Welcome to the Mystic Shop! 💰")
-    print(f"👛 Your gold: {player.gold}")
-    print("\n📦 Available Items:")
+    print("\nAvailable Items:")
     print_border(40)
     
-    # Group items by type
-    items_by_type = {
-        "weapon": [],
-        "armor": [],
-        "accessory": [],
-        "consumable": [],
-        "material": []  # Add materials category
-    }
-    
-    # Add materials to shop
-    for material_id, material in player.crafting_system.materials.items():
-        if material.rarity in [Rarity.COMMON, Rarity.UNCOMMON]:  # Only sell common and uncommon materials
-            items_by_type["material"].append((material.name, {
-                "cost": material.value,
-                "description": material.description,
-                "type": "material",
-                "id": material_id
-            }))
-    
-    for item, details in SHOP_ITEMS.items():
-        items_by_type[details["type"]].append((item, details))
-    
     # Display items by category
-    print("🗡️ Weapons:")
-    for item, details in items_by_type["weapon"]:
-        print(f"🎁 {item}: {details['cost']} 💰 - {details['description']}")
-    
-    print("\n🛡️ Armor:")
-    for item, details in items_by_type["armor"]:
-        print(f"🎁 {item}: {details['cost']} 💰 - {details['description']}")
-    
-    print("\n💍 Accessories:")
-    for item, details in items_by_type["accessory"]:
-        print(f"🎁 {item}: {details['cost']} 💰 - {details['description']}")
-    
-    print("\n🧪 Consumables:")
-    for item, details in items_by_type["consumable"]:
-        print(f"🎁 {item}: {details['cost']} 💰 - {details['description']}")
-    
-    # Display materials
-    print("\n📦 Materials:")
-    for item, details in items_by_type["material"]:
-        print(f"🎁 {item}: {details['cost']} 💰 - {details['description']}")
-    
+    for category, items in items_by_type.items():
+        print(f"\n{category.title()} Items:")
+        for item, details in items:
+            print(f"  • {item} - {details['cost']} gold")
     print_border(40)
     
     # Display current equipment
-    print("\n🎒 Your Equipment:")
-    print(f"Weapon: {player.equipment['weapon'] or 'None'}")
-    print(f"Armor: {player.equipment['armor'] or 'None'}")
-    print(f"Accessory: {player.equipment['accessory'] or 'None'}")
+    print("\nYour Current Equipment:")
+    print(f"Weapon: {player.equipment.get('weapon', 'None')}")
+    print(f"Armor: {player.equipment.get('armor', 'None')}")
+    print(f"Accessory: {player.equipment.get('accessory', 'None')}")
     print_border(40)
     
-    choice = input("\n🛍️ What would you like to buy? (or 'exit' to leave): ").title()
-    if choice in SHOP_ITEMS:
-        item_details = SHOP_ITEMS[choice]
-        if player.gold >= item_details["cost"]:
-            # Handle equipment items
-            if item_details["type"] in ["weapon", "armor", "accessory"]:
-                # Unequip current item if any
-                current_item = player.equipment[item_details["type"]]
-                if current_item:
-                    # Add the unequipped item back to inventory
-                    player.inventory.append(current_item)
+    while True:
+        try:
+            choice = input("\n🛍️ What would you like to buy? (or 'exit' to leave): ").strip().title()
+            if not choice:
+                print("❌ Please enter a valid item name!")
+                continue
                 
-                # Equip the new item
-                player.equipment[item_details["type"]] = choice
-                player.gold -= item_details["cost"]
-                print(f"\n✨ You equipped {choice}!")
+            if choice.lower() == 'exit':
+                break
+                
+            if choice in SHOP_ITEMS:
+                item_details = SHOP_ITEMS[choice]
+                if player.gold >= item_details["cost"]:
+                    # Handle equipment items
+                    if item_details["type"] in ["weapon", "armor", "accessory"]:
+                        # Unequip current item if any
+                        current_item = player.equipment.get(item_details["type"])
+                        if current_item:
+                            # Add the unequipped item back to inventory
+                            player.inventory.append(current_item)
+                        
+                        # Equip the new item
+                        player.equipment[item_details["type"]] = choice
+                        player.gold -= item_details["cost"]
+                        print(f"\n✨ You equipped {choice}!")
+                    else:
+                        # Handle consumable items
+                        player.gold -= item_details["cost"]
+                        player.inventory.append(choice)
+                        print(f"\n✨ You bought {choice}!")
+                    
+                    print(f"💰 Remaining gold: {player.gold}")
+                    check_quest_completion("item", choice)
+                    player.trades_completed += 1
+                    check_achievements()
+                else:
+                    print("❌ Not enough gold!")
+            elif choice in [item[0] for item in items_by_type["material"]]:
+                # Handle material purchase
+                material_details = next((details for item, details in items_by_type["material"] if item == choice), None)
+                if material_details:
+                    if player.gold >= material_details["cost"]:
+                        player.gold -= material_details["cost"]
+                        if material_details["id"] not in player.materials:
+                            player.materials[material_details["id"]] = 0
+                        player.materials[material_details["id"]] += 1
+                        print(f"\n✨ You bought {choice}!")
+                        print(f"💰 Remaining gold: {player.gold}")
+                        check_achievements()
+                    else:
+                        print("❌ Not enough gold!")
+                else:
+                    print("❌ Invalid material!")
             else:
-                # Handle consumable items
-                player.gold -= item_details["cost"]
-                player.inventory.append(choice)
-                print(f"\n✨ You bought {choice}!")
-            
-            print(f"💰 Remaining gold: {player.gold}")
-            check_quest_completion("item", choice)
-            player.trades_completed += 1
-            check_achievements()
-        else:
-            print("❌ Not enough gold!")
-    elif choice in [item[0] for item in items_by_type["material"]]:
-        # Handle material purchase
-        material_details = next(details for item, details in items_by_type["material"] if item == choice)
-        if player.gold >= material_details["cost"]:
-            player.gold -= material_details["cost"]
-            if material_details["id"] not in player.materials:
-                player.materials[material_details["id"]] = 0
-            player.materials[material_details["id"]] += 1
-            print(f"\n✨ You bought {choice}!")
-            print(f"💰 Remaining gold: {player.gold}")
-            check_achievements()
-        else:
-            print("❌ Not enough gold!")
-    elif choice != "Exit":
-        print("❌ Invalid item!")
+                print("❌ Invalid item!")
+        except Exception as e:
+            print(f"❌ An error occurred: {str(e)}")
+            continue
 
 def accept_quest(quest_name: str):
     if quest_name in AVAILABLE_QUESTS and quest_name not in player.active_quests and quest_name not in player.completed_quests:
@@ -1096,175 +1102,106 @@ def use_ability(enemy_health: int) -> int:
         print("Invalid ability choice!")
         return enemy_health
 
-def combat(enemy_name: str, enemy_health: int, enemy_damage: int):
-    print_header(f"⚔️ COMBAT WITH {enemy_name} ⚔️")
+def combat(enemy_name: str, enemy_health: int, enemy_attack: int, enemy_defense: int, enemy_gold: int, enemy_xp: int):
+    """Handle combat with an enemy"""
+    print_header(f"⚔️ Combat with {enemy_name}! ⚔️")
+    print(f"\nEnemy Stats:")
+    print(f"Health: {enemy_health}")
+    print(f"Attack: {enemy_attack}")
+    print(f"Defense: {enemy_defense}")
+    print_border(40)
     
-    original_defense = player.stats["defense"]
-    
-    # Create enemy object with status effects
-    enemy = type('Enemy', (), {
-        'name': enemy_name,
-        'health': enemy_health,
-        'damage': enemy_damage,
-        'stats': {'strength': 5, 'magic': 5, 'agility': 5, 'defense': 5},
-        'status_effects': []
-    })
-    
-    weather_conditions = {
-        "sunny": "☀️",
-        "rainy": "🌧️",
-        "foggy": "🌫️",
-        "stormy": "⛈️"
-    }
-    current_weather = random.choice(list(weather_conditions.keys()))
-    print(f"\n{weather_conditions[current_weather]} Current weather: {current_weather}")
-    
-    # Apply luck to weather effects
-    weather_bonus = player.luck_system.get_total_luck() / 10
-    
-    if current_weather == "rainy":
-        enemy.damage = max(1, int(enemy.damage * (1 - weather_bonus)))
-        print("💧 The rain reduces enemy damage!")
-    elif current_weather == "foggy":
-        agility_bonus = int(2 * (1 + weather_bonus))
-        player.stats["agility"] += agility_bonus
-        print(f"🌫️ The fog increases your agility by {agility_bonus}!")
-    elif current_weather == "stormy":
-        enemy.health = int(enemy.health * (1 + weather_bonus))
-        print("⚡ The storm strengthens the enemy!")
-    
-    # Apply equipment bonuses
-    if player.equipment["weapon"]:
-        if "Sword" in player.equipment["weapon"]:
-            player.stats["strength"] += 3
-        elif "Staff" in player.equipment["weapon"]:
-            player.stats["magic"] += 3
-        elif "Dagger" in player.equipment["weapon"]:
-            player.stats["agility"] += 3
-    
-    if player.equipment["armor"]:
-        if "Armor" in player.equipment["armor"]:
-            player.stats["defense"] += 3
-    
-    if player.equipment["accessory"]:
-        if "Amulet" in player.equipment["accessory"]:
-            for stat in player.stats:
-                player.stats[stat] += 2
-    
-    while player.health > 0 and enemy.health > 0:
-        print_border(40)
-        print(f"❤️ Your Health: {player.health}/{player.max_health} | 👿 {enemy_name}'s Health: {enemy.health}")
-        
-        # Display active status effects
-        if player.status_effects:
-            print("\n🔮 Your Status Effects:")
-            for effect in player.status_effects:
-                print(f"  • {effect.name} ({effect.duration} turns): {effect.description}")
-        
-        if enemy.status_effects:
-            print("\n🔮 Enemy Status Effects:")
-            for effect in enemy.status_effects:
-                print(f"  • {effect.name} ({effect.duration} turns): {effect.description}")
-        
-        print_border(40)
-        print("\n⚔️ Choose your action:")
-        print_menu_item("1", "🗡️ Attack")
-        print_menu_item("2", "✨ Use Special Ability")
-        if "Healing Potion" in player.inventory:
-            print_menu_item("3", "🧪 Use Healing Potion")
-        print_menu_item("4", "🏃 Try to Run")
-        print_border(40)
-
-        while True:
-            choice = input("Enter your choice: ")
-            if choice in ["1", "2", "3", "4"]:
-                break
-            print("❌ Invalid choice! Please enter a number between 1 and 4.")
-
-        if choice == "1":
-            # Apply luck to critical hit chance and damage
-            critical_chance = 0.2 + (player.luck_system.get_total_luck() / 50)
-            critical = random.random() < critical_chance
+    while True:
+        try:
+            print("\nYour Stats:")
+            print(f"Health: {player.health}")
+            print(f"Attack: {player.attack}")
+            print(f"Defense: {player.defense}")
+            print(f"Gold: {player.gold}")
+            print(f"XP: {player.xp}")
+            print_border(40)
             
-            base_damage = random.randint(3, 8) + player.stats["strength"]
-            damage = int(base_damage * (1 + player.luck_system.get_total_luck() / 10))
+            print("\n1. Attack")
+            print("2. Use Item")
+            print("3. Run")
             
-            if critical:
-                damage *= 2
-                print("💥 Critical Hit!")
-            enemy.health -= damage
-            print(f"⚔️ You deal {damage} damage!")
-        elif choice == "2":
-            enemy.health = use_ability(enemy.health)
-        elif choice == "3" and "Healing Potion" in player.inventory:
-            heal_amount = int(20 * (1 + player.luck_system.get_total_luck() / 10))
-            player.health = min(player.max_health, player.health + heal_amount)
-            player.inventory.remove("Healing Potion")
-            print(f"💚 You used a Healing Potion! +{heal_amount} HP")
-        elif choice == "4":
-            escape_chance = (player.stats["agility"] / 20) + (player.luck_system.get_total_luck() / 20)
-            if current_weather == "foggy":
-                escape_chance += 0.2
-            if random.random() < escape_chance:
-                print("🏃 You successfully fled!")
-                player.stats["defense"] = original_defense
-                return True
-            print("❌ Couldn't escape!")
-        
-        # Update and apply status effects
-        for effect in player.status_effects[:]:
-            if effect.update(player):
-                player.status_effects.remove(effect)
-        
-        for effect in enemy.status_effects[:]:
-            if effect.update(enemy):
-                enemy.status_effects.remove(effect)
-        
-        if enemy.health > 0:
-            # Check if enemy is stunned
-            is_stunned = any(effect.name == "Stunned" for effect in enemy.status_effects)
-            if is_stunned:
-                print("😴 Enemy is stunned and cannot act!")
-            else:
-                dodge_chance = (player.stats["agility"] / 50) + (player.luck_system.get_total_luck() / 25)
-                dodge = random.random() < dodge_chance
-                if dodge:
-                    print("💨 You dodged the attack!")
+            choice = input("\nWhat will you do? (1-3): ").strip()
+            
+            if choice == "1":
+                # Player attacks
+                damage = max(1, player.attack - enemy_defense)
+                enemy_health -= damage
+                print(f"\nYou dealt {damage} damage to {enemy_name}!")
+                
+                if enemy_health <= 0:
+                    print(f"\n✨ You defeated {enemy_name}!")
+                    player.gold += enemy_gold
+                    player.xp += enemy_xp
+                    print(f"💰 Gained {enemy_gold} gold!")
+                    print(f"✨ Gained {enemy_xp} XP!")
+                    check_quest_completion("combat", enemy_name)
+                    check_achievements()
+                    return True
+                
+                # Enemy attacks
+                damage = max(1, enemy_attack - player.defense)
+                player.health -= damage
+                print(f"\n{enemy_name} dealt {damage} damage to you!")
+                
+                if player.health <= 0:
+                    print("\n💀 You were defeated!")
+                    return False
+                    
+            elif choice == "2":
+                # Use item
+                if not player.inventory:
+                    print("\n❌ You have no items!")
+                    continue
+                    
+                print("\nYour Items:")
+                for i, item in enumerate(player.inventory, 1):
+                    print(f"{i}. {item}")
+                    
+                try:
+                    item_choice = int(input("\nWhich item will you use? (1-{0}): ".format(len(player.inventory)))) - 1
+                    if 0 <= item_choice < len(player.inventory):
+                        item = player.inventory[item_choice]
+                        if item in ["Health Potion", "Mana Potion"]:
+                            if item == "Health Potion":
+                                player.health = min(100, player.health + 30)
+                                print("\n✨ Restored 30 health!")
+                            else:
+                                player.mana = min(100, player.mana + 30)
+                                print("\n✨ Restored 30 mana!")
+                            player.inventory.pop(item_choice)
+                        else:
+                            print("\n❌ This item cannot be used in combat!")
+                    else:
+                        print("\n❌ Invalid item choice!")
+                except ValueError:
+                    print("\n❌ Please enter a valid number!")
+                    continue
+                    
+            elif choice == "3":
+                # Run away
+                if random.random() < 0.5:
+                    print("\n✨ You successfully ran away!")
+                    return True
                 else:
-                    damage_taken = max(1, enemy.damage - (player.stats["defense"] // 2))
-                    # Apply luck to damage reduction
-                    damage_taken = int(damage_taken * (1 - player.luck_system.get_total_luck() / 20))
-                    player.health -= damage_taken
-                    print(f"💢 {enemy_name} attacks you for {damage_taken} damage!")
-        
-        player.stats["defense"] = original_defense
-
-    if player.health <= 0:
-        print_header(f"☠️ DEFEAT ☠️")
-        print(f"You were defeated by {enemy_name}...")
-        player.stats["defense"] = original_defense
-        return False
-    else:
-        print_header(f"🏆 VICTORY 🏆")
-        # Apply luck to rewards
-        gold_reward = player.luck_system.apply_luck_bonus(random.randint(10, 25))
-        player.gold += gold_reward
-        player.total_score += gold_reward
-        print(f"💰 You found {gold_reward} gold!")
-        print(f"📊 Current Score: {player.total_score}")
-        gain_exp(15)
-        
-        # Add material drops
-        for material_id, material in player.crafting_system.materials.items():
-            if random.random() < material.drop_chance:
-                if material_id not in player.materials:
-                    player.materials[material_id] = 0
-                player.materials[material_id] += 1
-                print(f"📦 You found {material.name}!")
-        
-        player.stats["defense"] = original_defense
-        check_achievements()
-        return True
+                    print("\n❌ You failed to run away!")
+                    # Enemy gets a free attack
+                    damage = max(1, enemy_attack - player.defense)
+                    player.health -= damage
+                    print(f"\n{enemy_name} dealt {damage} damage to you!")
+                    
+                    if player.health <= 0:
+                        print("\n💀 You were defeated!")
+                        return False
+            else:
+                print("\n❌ Invalid choice!")
+        except Exception as e:
+            print(f"❌ An error occurred: {str(e)}")
+            continue
 
 # Dragon Battle System
 def dragon_battle():

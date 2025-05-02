@@ -169,6 +169,41 @@
 - Crafting system provides new gameplay options
 - Character customization enhances role-playing experience
 
+## Version 1.2.1 (Latest)
+**Release Date**: [Current Date]
+
+### Bug Fixes
+- Fixed "NPCS is not defined" error in achievements system
+- Resolved lore system display issues
+- Corrected circular import dependencies between modules
+- Fixed achievement tracking for NPC interactions
+- Addressed crafting system stability issues
+- Improved save/load system reliability
+
+### Code Organization
+- Separated NPC system into dedicated `npcs.py` module
+- Moved lore system to standalone `lore.py` module
+- Improved import structure to prevent circular dependencies
+- Enhanced code modularity and maintainability
+
+### Error Handling
+- Added comprehensive error handling in shop function
+- Improved combat system error handling
+- Enhanced file operations in save/load system
+- Added robust input validation throughout the game
+- Implemented better exception handling for NPC interactions
+
+### Documentation
+- Updated README.md with latest features and improvements
+- Added detailed code comments and docstrings
+- Improved error messages and user feedback
+
+### Notes
+- Codebase is now more stable and maintainable
+- Better separation of concerns between game systems
+- Improved error handling and user experience
+- Enhanced code organization and structure
+
 ---
 *Last Updated: [5/2/2025]*
 *Created by Ahmed Ayman* 
