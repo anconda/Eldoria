@@ -119,6 +119,56 @@
 - All basic systems are functioning as intended
 - Game balance may need adjustments based on player feedback
 
+## Version 1.2.0
+
+### 🎮 New Features Implemented
+- **Lore System**
+  - Comprehensive world history with five major eras
+  - Six factions with detailed information and relationships
+  - Faction reputation system
+  - World events tracking
+  - Random lore tidbits
+  - Lore menu for exploring the world's history
+
+- **Achievement System**
+  - Multiple achievement categories (Combat, Exploration, Social, Collection, Progression, Special)
+  - Achievement rewards (gold, exp, items)
+  - Hidden achievements
+  - Achievement notifications
+  - Progress tracking
+
+- **Crafting System**
+  - Material collection and management
+  - Rarity system for materials and items
+  - Crafting recipes with level requirements
+  - Material drops from enemies
+  - Crafting menu interface
+
+### 🔄 Updated Systems
+- **Character Customization**
+  - Gender selection (Male, Female, Non-binary)
+  - Background selection (Noble, Commoner, Outcast, Scholar, Warrior, Rogue)
+  - Appearance customization (hair color, eye color, skin tone, height, build)
+  - Background-specific bonuses
+
+- **Save/Load System**
+  - Enhanced save file management
+  - Password protection for saves
+  - Save name validation
+  - Improved save/load menus
+
+### 🐛 Bug Fixes
+- Fixed lore system display issues
+- Resolved achievement tracking bugs
+- Improved crafting system stability
+- Enhanced save/load reliability
+
+### 📌 Notes
+- The game now offers a richer world with detailed lore
+- Achievement system adds new goals and rewards
+- Crafting system provides new gameplay options
+- Character customization enhances role-playing experience
+
 ---
-*Last Updated: [4/22/2025]*
+*Last Updated: [5/2/2025]*
 *Created by Ahmed Ayman* 

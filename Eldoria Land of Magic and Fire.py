@@ -1,6 +1,13 @@
 import time
 import random
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Set
+from save_manager import SaveManager
+from achievements import AchievementSystem, AchievementCategory
+from crafting import CraftingSystem, Rarity, Material, CraftingRecipe
+from enum import Enum
+from dataclasses import dataclass
+from npcs import NPCS, NPC
+from lore import LoreSystem, Faction, Era, WorldEvent, FactionInfo  # Add this import
 
 #this is a text based RPG game that was based on my novel "the amulet of eldoria" and D&D one of my favorite games
 #the game is very simple and is meant to be a fun and easy game to play
@@ -91,8 +98,33 @@ class StatusEffect:
             return True
         return False
 
+class Gender(Enum):
+    MALE = "Male"
+    FEMALE = "Female"
+    NON_BINARY = "Non-binary"
+
+class Background(Enum):
+    NOBLE = "Noble"
+    COMMONER = "Commoner"
+    OUTCAST = "Outcast"
+    SCHOLAR = "Scholar"
+    WARRIOR = "Warrior"
+    ROGUE = "Rogue"
+
+@dataclass
+class Appearance:
+    hair_color: str
+    eye_color: str
+    skin_tone: str
+    height: str
+    build: str
+
 class Player:
     def __init__(self):
+        self.name = ""
+        self.gender: Optional[Gender] = None
+        self.appearance: Optional[Appearance] = None
+        self.background: Optional[Background] = None
         self.level = 1
         self.exp = 0
         self.max_health = 50
@@ -125,6 +157,16 @@ class Player:
         }
         self.combo_counter = 0  # New: for combo attacks
         self.last_ability_used = None  # New: for combo attacks
+        self.visited_locations = set()  # Track visited locations
+        self.trades_completed = 0  # Track completed trades
+        self.consecutive_lucky_days = 0  # Track consecutive lucky days
+        self.achievement_system = AchievementSystem()  # Add achievement system
+        self.materials: Dict[str, int] = {}  # material_id: quantity
+        self.crafting_system = CraftingSystem()  # Add crafting system
+        self.lore_system = LoreSystem()
+        self.known_locations: Set[str] = set()
+        self.known_npcs: Set[str] = set()
+        self.quest_history: List[str] = []
 
 player = Player()
 
@@ -218,6 +260,51 @@ NPCS = {
             "Smoke Bombs": {"cost": 45, "requires_friendship": 3},
             "Lockpick Set": {"cost": 30, "requires_friendship": 1}
         }
+    ),
+    "Druidess Sylva": NPC(
+        "Druidess Sylva",
+        "High Druid",
+        "Sacred Grove",
+        {
+            "greeting": "Nature welcomes you, traveler.",
+            "quest": "The balance of nature is disturbed...",
+            "friendly": "You understand the ways of nature.",
+            "trade": "I can teach you the secrets of the forest."
+        },
+        {
+            "Nature's Blessing": {"cost": 45, "requires_friendship": 3},
+            "Herbal Remedies": {"cost": 30, "requires_friendship": 1}
+        }
+    ),
+    "Guildmaster Goldhand": NPC(
+        "Guildmaster Goldhand",
+        "Merchant Leader",
+        "Grand Market",
+        {
+            "greeting": "Welcome to the heart of commerce!",
+            "quest": "I need someone to handle a delicate trade...",
+            "friendly": "You've proven yourself a trustworthy trader.",
+            "trade": "Looking for something special?"
+        },
+        {
+            "Merchant's License": {"cost": 45, "requires_friendship": 3},
+            "Trade Routes Map": {"cost": 30, "requires_friendship": 1}
+        }
+    ),
+    "Dragon Priest Malakar": NPC(
+        "Dragon Priest Malakar",
+        "Cult Leader",
+        "Dragon's Lair",
+        {
+            "greeting": "The dragon's fire burns within you...",
+            "quest": "The ancient ones stir in their slumber...",
+            "friendly": "You understand the true power of dragons.",
+            "trade": "I have relics of the ancient ones..."
+        },
+        {
+            "Dragon Scale": {"cost": 45, "requires_friendship": 3},
+            "Dragon's Breath Potion": {"cost": 30, "requires_friendship": 1}
+        }
     )
 }
 
@@ -290,6 +377,7 @@ def level_up():
         choice = input().lower()
         if choice == "yes":
             spend_skill_points()
+    check_achievements()
 
 def spend_skill_points():
     # Define available skills based on player class
@@ -442,8 +530,19 @@ def shop():
         "weapon": [],
         "armor": [],
         "accessory": [],
-        "consumable": []
+        "consumable": [],
+        "material": []  # Add materials category
     }
+    
+    # Add materials to shop
+    for material_id, material in player.crafting_system.materials.items():
+        if material.rarity in [Rarity.COMMON, Rarity.UNCOMMON]:  # Only sell common and uncommon materials
+            items_by_type["material"].append((material.name, {
+                "cost": material.value,
+                "description": material.description,
+                "type": "material",
+                "id": material_id
+            }))
     
     for item, details in SHOP_ITEMS.items():
         items_by_type[details["type"]].append((item, details))
@@ -463,6 +562,11 @@ def shop():
     
     print("\n🧪 Consumables:")
     for item, details in items_by_type["consumable"]:
+        print(f"🎁 {item}: {details['cost']} 💰 - {details['description']}")
+    
+    # Display materials
+    print("\n📦 Materials:")
+    for item, details in items_by_type["material"]:
         print(f"🎁 {item}: {details['cost']} 💰 - {details['description']}")
     
     print_border(40)
@@ -498,6 +602,21 @@ def shop():
             
             print(f"💰 Remaining gold: {player.gold}")
             check_quest_completion("item", choice)
+            player.trades_completed += 1
+            check_achievements()
+        else:
+            print("❌ Not enough gold!")
+    elif choice in [item[0] for item in items_by_type["material"]]:
+        # Handle material purchase
+        material_details = next(details for item, details in items_by_type["material"] if item == choice)
+        if player.gold >= material_details["cost"]:
+            player.gold -= material_details["cost"]
+            if material_details["id"] not in player.materials:
+                player.materials[material_details["id"]] = 0
+            player.materials[material_details["id"]] += 1
+            print(f"\n✨ You bought {choice}!")
+            print(f"💰 Remaining gold: {player.gold}")
+            check_achievements()
         else:
             print("❌ Not enough gold!")
     elif choice != "Exit":
@@ -535,6 +654,26 @@ def complete_quest(quest):
     # Remove from active quests and add to completed
     player.active_quests.remove(quest)
     player.completed_quests.append(quest["description"])
+    check_achievements()
+    
+    # Learn about related events
+    for event in player.lore_system.world_events:
+        if any(faction in event.related_factions for faction in player.lore_system.faction_info.keys()):
+            player.lore_system.learn_event(event.name)
+    
+    # Update faction relations
+    if "Council of Mages" in quest["description"]:
+        player.lore_system.update_faction_relation(Faction.COUNCIL_OF_MAGES, 10)
+    elif "Knights of Eldoria" in quest["description"]:
+        player.lore_system.update_faction_relation(Faction.KNIGHTS_OF_ELDORIA, 10)
+    elif "Shadow Thieves" in quest["description"]:
+        player.lore_system.update_faction_relation(Faction.SHADOW_THIEVES, 10)
+    elif "Druid Circle" in quest["description"]:
+        player.lore_system.update_faction_relation(Faction.DRUID_CIRCLE, 10)
+    elif "Merchant Guild" in quest["description"]:
+        player.lore_system.update_faction_relation(Faction.MERCHANT_GUILD, 10)
+    elif "Cult of the Dragon" in quest["description"]:
+        player.lore_system.update_faction_relation(Faction.CULT_OF_THE_DRAGON, 10)
 
 def quest_board():
     print_header("📜 QUEST BOARD 📜")
@@ -570,10 +709,176 @@ def quest_board():
         print("❌ Invalid quest name.")
 
 # Introduction and class selection
+def customize_character():
+    """Handle character customization"""
+    print_header("👤 CHARACTER CUSTOMIZATION 👤")
+    
+    # Gender Selection
+    print("\nChoose your gender:")
+    for i, gender in enumerate(Gender, 1):
+        print(f"{i}. {gender.value}")
+    
+    while True:
+        try:
+            choice = int(input("\nEnter your choice (1-3): "))
+            if 1 <= choice <= len(Gender):
+                player.gender = list(Gender)[choice - 1]
+                break
+            print("❌ Invalid choice!")
+        except ValueError:
+            print("❌ Please enter a number!")
+    
+    # Background Selection
+    print("\nChoose your background:")
+    for i, background in enumerate(Background, 1):
+        print(f"{i}. {background.value}")
+    
+    while True:
+        try:
+            choice = int(input("\nEnter your choice (1-6): "))
+            if 1 <= choice <= len(Background):
+                player.background = list(Background)[choice - 1]
+                break
+            print("❌ Invalid choice!")
+        except ValueError:
+            print("❌ Please enter a number!")
+    
+    # Appearance Customization
+    print("\nCustomize your appearance:")
+    
+    # Hair Color
+    hair_colors = ["Black", "Brown", "Blonde", "Red", "White", "Blue", "Green", "Purple"]
+    print("\nChoose your hair color:")
+    for i, color in enumerate(hair_colors, 1):
+        print(f"{i}. {color}")
+    
+    while True:
+        try:
+            choice = int(input("\nEnter your choice (1-8): "))
+            if 1 <= choice <= len(hair_colors):
+                hair_color = hair_colors[choice - 1]
+                break
+            print("❌ Invalid choice!")
+        except ValueError:
+            print("❌ Please enter a number!")
+    
+    # Eye Color
+    eye_colors = ["Brown", "Blue", "Green", "Hazel", "Gray", "Amber", "Red", "Purple"]
+    print("\nChoose your eye color:")
+    for i, color in enumerate(eye_colors, 1):
+        print(f"{i}. {color}")
+    
+    while True:
+        try:
+            choice = int(input("\nEnter your choice (1-8): "))
+            if 1 <= choice <= len(eye_colors):
+                eye_color = eye_colors[choice - 1]
+                break
+            print("❌ Invalid choice!")
+        except ValueError:
+            print("❌ Please enter a number!")
+    
+    # Skin Tone
+    skin_tones = ["Pale", "Fair", "Medium", "Olive", "Tan", "Brown", "Dark"]
+    print("\nChoose your skin tone:")
+    for i, tone in enumerate(skin_tones, 1):
+        print(f"{i}. {tone}")
+    
+    while True:
+        try:
+            choice = int(input("\nEnter your choice (1-7): "))
+            if 1 <= choice <= len(skin_tones):
+                skin_tone = skin_tones[choice - 1]
+                break
+            print("❌ Invalid choice!")
+        except ValueError:
+            print("❌ Please enter a number!")
+    
+    # Height
+    heights = ["Short", "Average", "Tall", "Very Tall"]
+    print("\nChoose your height:")
+    for i, height in enumerate(heights, 1):
+        print(f"{i}. {height}")
+    
+    while True:
+        try:
+            choice = int(input("\nEnter your choice (1-4): "))
+            if 1 <= choice <= len(heights):
+                height = heights[choice - 1]
+                break
+            print("❌ Invalid choice!")
+        except ValueError:
+            print("❌ Please enter a number!")
+    
+    # Build
+    builds = ["Slim", "Average", "Athletic", "Muscular", "Heavy"]
+    print("\nChoose your build:")
+    for i, build in enumerate(builds, 1):
+        print(f"{i}. {build}")
+    
+    while True:
+        try:
+            choice = int(input("\nEnter your choice (1-5): "))
+            if 1 <= choice <= len(builds):
+                build = builds[choice - 1]
+                break
+            print("❌ Invalid choice!")
+        except ValueError:
+            print("❌ Please enter a number!")
+    
+    # Create appearance object
+    player.appearance = Appearance(
+        hair_color=hair_color,
+        eye_color=eye_color,
+        skin_tone=skin_tone,
+        height=height,
+        build=build
+    )
+    
+    # Apply background bonuses
+    if player.background == Background.NOBLE:
+        player.gold += 50
+        print("\n💰 As a noble, you start with 50 extra gold!")
+    elif player.background == Background.SCHOLAR:
+        player.stats["magic"] += 2
+        print("\n✨ As a scholar, you gain +2 to magic!")
+    elif player.background == Background.WARRIOR:
+        player.stats["strength"] += 2
+        print("\n💪 As a warrior, you gain +2 to strength!")
+    elif player.background == Background.ROGUE:
+        player.stats["agility"] += 2
+        print("\n🏃 As a rogue, you gain +2 to agility!")
+    
+    # Show character summary
+    print_header("👤 CHARACTER SUMMARY 👤")
+    print(f"\nName: {player.name}")
+    print(f"Gender: {player.gender.value}")
+    print(f"Background: {player.background.value}")
+    print("\nAppearance:")
+    print(f"  Hair: {player.appearance.hair_color}")
+    print(f"  Eyes: {player.appearance.eye_color}")
+    print(f"  Skin: {player.appearance.skin_tone}")
+    print(f"  Height: {player.appearance.height}")
+    print(f"  Build: {player.appearance.build}")
+    
+    input("\nPress Enter to continue...")
+
 def intro():
     print_animated("✨ Welcome to Eldoria: Land of Magic and Fire ✨", delay=0.05, end_pause=1.0)
     pause(1.5)
-    print_animated("You are one of the few chosen to stand against the growing darkness.", delay=0.04, end_pause=1.2)
+    
+    # Get player name
+    while True:
+        player_name = input("\nWhat is your name, brave adventurer? ").strip()
+        if player_name:
+            player.name = player_name
+            break
+        print("❌ Please enter a valid name!")
+    
+    # Character customization
+    customize_character()
+    
+    print_animated(f"\nWelcome, {player.name}! You are one of the few chosen to stand against the growing darkness.", delay=0.04, end_pause=1.2)
     pause(1.0)
 
     while True:
@@ -948,7 +1253,17 @@ def combat(enemy_name: str, enemy_health: int, enemy_damage: int):
         print(f"💰 You found {gold_reward} gold!")
         print(f"📊 Current Score: {player.total_score}")
         gain_exp(15)
+        
+        # Add material drops
+        for material_id, material in player.crafting_system.materials.items():
+            if random.random() < material.drop_chance:
+                if material_id not in player.materials:
+                    player.materials[material_id] = 0
+                player.materials[material_id] += 1
+                print(f"📦 You found {material.name}!")
+        
         player.stats["defense"] = original_defense
+        check_achievements()
         return True
 
 # Dragon Battle System
@@ -1063,6 +1378,8 @@ def trade_with_npc(npc: NPC):
             # Apply luck to friendship gain from trading
             friendship_gain = player.luck_system.apply_luck_bonus(2)
             npc.friendship += friendship_gain
+            player.trades_completed += 1
+            check_achievements()
         else:
             print("Not enough gold!")
     elif item_choice != "exit":
@@ -1110,8 +1427,448 @@ def thieves_den():
         print("You found a hidden treasure!")
         player.gold += random.randint(10, 30)
 
+def serialize_game_state() -> dict:
+    """Convert current game state to a dictionary for saving"""
+    return {
+        "player": {
+            "name": player.name,
+            "gender": player.gender.value if player.gender else None,
+            "background": player.background.value if player.background else None,
+            "appearance": {
+                "hair_color": player.appearance.hair_color if player.appearance else None,
+                "eye_color": player.appearance.eye_color if player.appearance else None,
+                "skin_tone": player.appearance.skin_tone if player.appearance else None,
+                "height": player.appearance.height if player.appearance else None,
+                "build": player.appearance.build if player.appearance else None
+            } if player.appearance else None,
+            "level": player.level,
+            "exp": player.exp,
+            "max_health": player.max_health,
+            "health": player.health,
+            "gold": player.gold,
+            "inventory": player.inventory,
+            "player_class": player.player_class,
+            "total_score": player.total_score,
+            "turns_taken": player.turns_taken,
+            "stats": player.stats,
+            "abilities": player.abilities,
+            "active_quests": player.active_quests,
+            "completed_quests": player.completed_quests,
+            "skill_points": player.skill_points,
+            "skill_tree": player.skill_tree,
+            "equipment": player.equipment,
+            "combo_counter": player.combo_counter,
+            "last_ability_used": player.last_ability_used,
+            "status_effects": [
+                {
+                    "name": effect.name,
+                    "duration": effect.duration,
+                    "effect_type": effect.effect_type,
+                    "value": effect.value,
+                    "description": effect.description
+                }
+                for effect in player.status_effects
+            ],
+            "visited_locations": list(player.visited_locations),
+            "trades_completed": player.trades_completed,
+            "consecutive_lucky_days": player.consecutive_lucky_days,
+            "unlocked_achievements": list(player.achievement_system.unlocked_achievements),
+            "materials": player.materials,
+            "known_events": list(player.lore_system.known_events),
+            "faction_relations": {faction.value: relation for faction, relation in player.lore_system.faction_relations.items()},
+            "known_locations": list(player.known_locations),
+            "known_npcs": list(player.known_npcs),
+            "quest_history": player.quest_history
+        },
+        "luck_system": {
+            "base_luck": player.luck_system.base_luck,
+            "daily_luck": player.luck_system.daily_luck,
+            "last_update": player.luck_system.last_update
+        }
+    }
+
+def deserialize_game_state(game_state: dict) -> None:
+    """Load game state from dictionary"""
+    global player
+    
+    # Create new player instance
+    player = Player()
+    
+    # Restore player attributes
+    player_data = game_state["player"]
+    player.name = player_data["name"]
+    
+    # Restore gender
+    if player_data["gender"]:
+        player.gender = Gender(player_data["gender"])
+    
+    # Restore background
+    if player_data["background"]:
+        player.background = Background(player_data["background"])
+    
+    # Restore appearance
+    if player_data["appearance"]:
+        player.appearance = Appearance(
+            hair_color=player_data["appearance"]["hair_color"],
+            eye_color=player_data["appearance"]["eye_color"],
+            skin_tone=player_data["appearance"]["skin_tone"],
+            height=player_data["appearance"]["height"],
+            build=player_data["appearance"]["build"]
+        )
+    
+    # Restore other player attributes
+    for key, value in player_data.items():
+        if key == "status_effects":
+            player.status_effects = [
+                StatusEffect(
+                    effect["name"],
+                    effect["duration"],
+                    effect["effect_type"],
+                    effect["value"],
+                    effect["description"]
+                )
+                for effect in value
+            ]
+        else:
+            setattr(player, key, value)
+    
+    # Restore luck system
+    luck_data = game_state["luck_system"]
+    player.luck_system.base_luck = luck_data["base_luck"]
+    player.luck_system.daily_luck = luck_data["daily_luck"]
+    player.luck_system.last_update = luck_data["last_update"]
+    
+    # Restore achievement system
+    player.achievement_system = AchievementSystem()
+    player.achievement_system.unlocked_achievements = set(player_data["unlocked_achievements"])
+    
+    # Restore additional player attributes
+    player.visited_locations = set(player_data["visited_locations"])
+    player.trades_completed = player_data["trades_completed"]
+    player.consecutive_lucky_days = player_data["consecutive_lucky_days"]
+    player.materials = dict(player_data["materials"])
+    
+    # Restore lore system
+    player.lore_system.known_events = set(player_data["known_events"])
+    player.lore_system.faction_relations = {
+        Faction(faction): relation for faction, relation in player_data["faction_relations"].items()
+    }
+    player.known_locations = set(player_data["known_locations"])
+    player.known_npcs = set(player_data["known_npcs"])
+    player.quest_history = player_data["quest_history"]
+
+def save_game_menu():
+    """Display save game menu"""
+    print_header("💾 SAVE GAME 💾")
+    save_manager = SaveManager()
+    
+    # List existing saves
+    saves = save_manager.list_saves()
+    if saves:
+        print("\n📂 Existing Saves:")
+        for i, save in enumerate(saves, 1):
+            print(f"{i}. {save}")
+        print(f"{len(saves) + 1}. New Save")
+    else:
+        print("\n📂 No existing saves found")
+        print("1. New Save")
+    
+    while True:
+        try:
+            choice = int(input("\nEnter your choice: "))
+            if 1 <= choice <= (len(saves) + 1):
+                break
+            print("❌ Invalid choice!")
+        except ValueError:
+            print("❌ Please enter a number!")
+    
+    if choice <= len(saves):
+        save_name = saves[choice - 1]
+        if input(f"Overwrite save '{save_name}'? (yes/no): ").lower() != "yes":
+            return
+    else:
+        while True:
+            save_name = input("Enter save name: ").strip()
+            if save_name:
+                break
+            print("❌ Save name cannot be empty!")
+    
+    password = input("Enter password for save file: ")
+    if not password:
+        print("❌ Password cannot be empty!")
+        return
+    
+    game_state = serialize_game_state()
+    if save_manager.save_game(game_state, save_name, password):
+        print(f"✅ Game saved successfully as '{save_name}'!")
+    else:
+        print("❌ Failed to save game!")
+
+def load_game_menu():
+    """Display load game menu"""
+    print_header("📂 LOAD GAME 📂")
+    save_manager = SaveManager()
+    
+    saves = save_manager.list_saves()
+    if not saves:
+        print("\n❌ No save files found!")
+        return False
+    
+    print("\n📂 Available Saves:")
+    for i, save in enumerate(saves, 1):
+        print(f"{i}. {save}")
+    print("0. Cancel")
+    
+    while True:
+        try:
+            choice = int(input("\nEnter save number to load (or 0 to cancel): "))
+            if 0 <= choice <= len(saves):
+                break
+            print("❌ Invalid choice!")
+        except ValueError:
+            print("❌ Please enter a number!")
+    
+    if choice == 0:
+        return False
+    
+    save_name = saves[choice - 1]
+    password = input("Enter password: ")
+    
+    game_state = save_manager.load_game(save_name, password)
+    if game_state:
+        deserialize_game_state(game_state)
+        print(f"✅ Game loaded successfully from '{save_name}'!")
+        print(f"Welcome back, {player.name}!")
+        return True
+    else:
+        print("❌ Failed to load game!")
+        return False
+
+def show_achievements_menu():
+    """Display achievements menu"""
+    print_header("🏆 ACHIEVEMENTS 🏆")
+    achievement_system = player.achievement_system
+    
+    # Show completion stats
+    unlocked = achievement_system.get_unlocked_count()
+    total = achievement_system.get_total_count()
+    percentage = achievement_system.get_completion_percentage()
+    print(f"\n📊 Progress: {unlocked}/{total} ({percentage:.1f}%)")
+    print_border(40)
+    
+    # Show achievements by category
+    categories = [
+        AchievementCategory.COMBAT,
+        AchievementCategory.EXPLORATION,
+        AchievementCategory.SOCIAL,
+        AchievementCategory.COLLECTION,
+        AchievementCategory.PROGRESSION,
+        AchievementCategory.SPECIAL
+    ]
+    
+    for category in categories:
+        print(f"\n{category.value} Achievements:")
+        achievements = achievement_system.get_category_achievements(category)
+        for achievement_id, status in achievements.items():
+            if status["hidden"]:
+                print("  🔒 Hidden Achievement")
+            else:
+                unlocked_symbol = "✅" if status["unlocked"] else "❌"
+                print(f"  {unlocked_symbol} {status['name']}: {status['description']}")
+        print_border(40)
+    
+    input("\nPress Enter to return to the main menu...")
+
+def check_achievements():
+    """Check for new achievements and display notifications"""
+    newly_unlocked = player.achievement_system.check_achievements(player)
+    if newly_unlocked:
+        print_header("🎉 ACHIEVEMENT UNLOCKED! 🎉")
+        for achievement_id in newly_unlocked:
+            achievement = player.achievement_system.achievements[achievement_id]
+            print(f"\n🏆 {achievement.name}")
+            print(f"📝 {achievement.description}")
+            if "gold" in achievement.reward:
+                print(f"💰 +{achievement.reward['gold']} gold")
+            if "exp" in achievement.reward:
+                print(f"✨ +{achievement.reward['exp']} exp")
+        print_border(40)
+        input("\nPress Enter to continue...")
+
+def show_crafting_menu():
+    """Display crafting menu"""
+    print_header("🔨 CRAFTING MENU 🔨")
+    
+    # Show materials
+    print("\n📦 Your Materials:")
+    print_border(40)
+    if not player.materials:
+        print("No materials in inventory")
+    else:
+        for material_id, quantity in player.materials.items():
+            material = player.crafting_system.get_material_by_id(material_id)
+            if material:
+                print(f"{material.name} ({material.rarity.value}): {quantity}")
+    print_border(40)
+    
+    # Show available recipes
+    print("\n📜 Available Recipes:")
+    print_border(40)
+    available_recipes = player.crafting_system.get_available_recipes(player.level, player.materials)
+    if not available_recipes:
+        print("No recipes available")
+    else:
+        for i, recipe in enumerate(available_recipes, 1):
+            print(f"{i}. {recipe.name} ({recipe.rarity.value})")
+            print(f"   {recipe.description}")
+            print("   Required Materials:")
+            for material_id, quantity in recipe.materials.items():
+                material = player.crafting_system.get_material_by_id(material_id)
+                if material:
+                    print(f"   - {material.name}: {quantity}")
+            print_border(40)
+    
+    while True:
+        try:
+            choice = int(input("\nEnter recipe number to craft (or 0 to exit): "))
+            if choice == 0:
+                break
+            if 1 <= choice <= len(available_recipes):
+                recipe = available_recipes[choice - 1]
+                result = player.crafting_system.craft_item(recipe.id, player.materials)
+                if result:
+                    print(f"\n✨ You crafted {recipe.name}!")
+                    player.inventory.append(result)
+                    check_achievements()
+                else:
+                    print("❌ Failed to craft item!")
+            else:
+                print("❌ Invalid choice!")
+        except ValueError:
+            print("❌ Please enter a number!")
+
+def show_lore_menu():
+    """Display the lore menu"""
+    print_header("📚 ELDORIA LORE 📚")
+    
+    while True:
+        print("\n1. World History")
+        print("2. Factions")
+        print("3. Known Events")
+        print("4. Faction Relations")
+        print("5. Random Lore")
+        print("0. Back to Main Menu")
+        
+        choice = input("\nEnter your choice: ")
+        
+        if choice == "1":
+            show_world_history()
+        elif choice == "2":
+            show_factions()
+        elif choice == "3":
+            show_known_events()
+        elif choice == "4":
+            show_faction_relations()
+        elif choice == "5":
+            show_random_lore()
+        elif choice == "0":
+            break
+        else:
+            print("❌ Invalid choice!")
+
+def show_world_history():
+    """Display the history of Eldoria"""
+    print_header("📜 WORLD HISTORY 📜")
+    
+    for era in Era:
+        print(f"\n{era.value}:")
+        events = [event for event in player.lore_system.world_events if event.era == era]
+        for event in events:
+            known = event.name in player.lore_system.known_events
+            print(f"  {'✅' if known else '❓'} {event.name}")
+            if known:
+                print(f"     {event.description}")
+                print(f"     Impact: {event.impact}")
+    
+    input("\nPress Enter to continue...")
+
+def show_factions():
+    """Display information about factions"""
+    print_header("🏰 FACTIONS 🏰")
+    
+    for faction, info in player.lore_system.faction_info.items():
+        print(f"\n{info.name}:")
+        print(f"  {info.description}")
+        print("\n  Goals:")
+        for goal in info.goals:
+            print(f"    • {goal}")
+        print("\n  Headquarters: " + info.headquarters)
+        print("  Leader: " + info.leader)
+        print("\n  Allies:", ", ".join(ally.value for ally in info.allies))
+        print("  Enemies:", ", ".join(enemy.value for enemy in info.enemies))
+        print(f"  Your Status: {player.lore_system.get_faction_status(faction)}")
+    
+    input("\nPress Enter to continue...")
+
+def show_known_events():
+    """Display events the player has learned about"""
+    print_header("📅 KNOWN EVENTS 📅")
+    
+    if not player.lore_system.known_events:
+        print("\nYou haven't learned about any major events yet.")
+    else:
+        for event in player.lore_system.world_events:
+            if event.name in player.lore_system.known_events:
+                print(f"\n{event.name} ({event.era.value}):")
+                print(f"  {event.description}")
+                print(f"  Impact: {event.impact}")
+                print("  Related Factions:", ", ".join(faction.value for faction in event.related_factions))
+    
+    input("\nPress Enter to continue...")
+
+def show_faction_relations():
+    """Display the player's relations with factions"""
+    print_header("🤝 FACTION RELATIONS 🤝")
+    
+    for faction in Faction:
+        status = player.lore_system.get_faction_status(faction)
+        print(f"\n{faction.value}: {status}")
+    
+    input("\nPress Enter to continue...")
+
+def show_random_lore():
+    """Display a random piece of lore"""
+    print_header("🔍 RANDOM LORE 🔍")
+    
+    tidbit = player.lore_system.get_random_lore_tidbit()
+    print(f"\n{tidbit}")
+    
+    input("\nPress Enter to continue...")
+
 # Main game loop
 def main():
+    # Add save/load option to main menu
+    print_header("✨ WELCOME TO ELDORIA: LAND OF MAGIC AND FIRE ✨")
+    print("\n1. New Game")
+    print("2. Load Game")
+    print("3. Exit")
+    
+    while True:
+        try:
+            choice = int(input("\nEnter your choice (1-3): "))
+            if 1 <= choice <= 3:
+                break
+            print("❌ Invalid choice!")
+        except ValueError:
+            print("❌ Please enter a number!")
+    
+    if choice == 2:
+        if not load_game_menu():
+            return
+    elif choice == 3:
+        return
+    
+    # Original intro and game loop
     intro()
     turn = 0
     
@@ -1135,14 +1892,18 @@ def main():
         print_menu_item("8", "💬 Talk to NPCs")
         print_menu_item("9", "📊 View Character Status")
         print_menu_item("10", "🚪 Exit Game")
+        print_menu_item("11", "💾 Save Game")
+        print_menu_item("12", "🏆 View Achievements")
+        print_menu_item("13", "🔨 Crafting")  # Add crafting option
+        print_menu_item("14", "📚 Lore")  # Add lore option
         print_border(40)
         
         while True:
             try:
-                location = input("Enter 1-10: ")
-                if location in [str(i) for i in range(1, 11)]:
+                location = input("Enter 1-14: ")  # Update range
+                if location in [str(i) for i in range(1, 15)]:  # Update range
                     break
-                print("❌ Invalid choice! Please enter a number between 1 and 10.")
+                print("❌ Invalid choice! Please enter a number between 1 and 14.")
             except ValueError:
                 print("❌ Invalid input! Please enter a number.")
 
@@ -1260,6 +2021,22 @@ def main():
             print_header("👋 FAREWELL, BRAVE ADVENTURER! 👋")
             print(f"🏆 Final Score: {player.total_score}")
             break
+
+        if location == "11":
+            save_game_menu()
+            continue
+
+        if location == "12":
+            show_achievements_menu()
+            continue
+
+        if location == "13":
+            show_crafting_menu()
+            continue
+
+        if location == "14":
+            show_lore_menu()
+            continue
 
 if __name__ == "__main__":
     main()
